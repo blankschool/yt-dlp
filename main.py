@@ -1,150 +1,96 @@
 import os
-import re
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
 from yt_dlp import YoutubeDL
+import uuid
 
 app = FastAPI(
-    title="yt-dlp Microservice - Universal",
-    description="Suporta TikTok (cookies), YouTube e qualquer site do yt-dlp",
-    version="2.0.0",
+    title="yt-dlp Downloader",
+    description="Baixa vídeos TikTok/YouTube e retorna binário",
+    version="3.0.0",
 )
 
+COOKIE_FILE = "cookies/tiktok.txt"
 
-# ------------------------
-# Detection Helpers
-# ------------------------
+TIKTOK_UA = os.getenv("TIKTOK_UA",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/120.0.0.0 Safari/537.36"
+)
 
 def is_tiktok(url: str) -> bool:
     return "tiktok.com" in url or "vt.tiktok.com" in url
 
-
 def is_youtube(url: str) -> bool:
-    return (
-        "youtube.com" in url
-        or "youtu.be" in url
-    )
+    return "youtube.com" in url or "youtu.be" in url
 
-
-COOKIE_FILE = "cookies/tiktok.txt"
-
-
-# ------------------------
-# Request Model
-# ------------------------
-
-class YtRequest(BaseModel):
+class VideoRequest(BaseModel):
     url: str
-    audio_only: bool | None = False
 
 
-# ------------------------
-# Routes
-# ------------------------
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
-
-@app.post("/extract")
-def extract(req: YtRequest):
+@app.post("/download")
+def download(req: VideoRequest):
     url = req.url
+    temp_filename = f"/tmp/{uuid.uuid4()}.mp4"
 
-    # =====================
-    # TikTok → USAR COOKIES
-    # =====================
+    # TikTok
     if is_tiktok(url):
         ydl_opts = {
             "quiet": True,
-            "no_warnings": True,
-            "skip_download": True,
+            "noprogress": True,
+            "outtmpl": temp_filename,
             "cookiefile": COOKIE_FILE,
-            "format": "bestaudio/best" if req.audio_only else "best",
-        }
-
-    # =====================
-    # YouTube → NÃO USAR COOKIES
-    # =====================
-    elif is_youtube(url):
-        ydl_opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "skip_download": True,
-            "format": "bestaudio/best" if req.audio_only else "best",
-            # Melhora compatibilidade c/ YouTube
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["web", "android"],
-                }
+            "format": "best",
+            "http_headers": {
+                "User-Agent": TIKTOK_UA,
+                "Referer": "https://www.tiktok.com/",
             }
         }
 
-    # =====================
+    # YouTube (melhor qualidade)
+    elif is_youtube(url):
+        ydl_opts = {
+            "quiet": True,
+            "noprogress": True,
+            "outtmpl": temp_filename,
+            "format": "best[ext=mp4]/best"
+        }
+
     # Outros sites
-    # =====================
     else:
         ydl_opts = {
             "quiet": True,
-            "no_warnings": True,
-            "skip_download": True,
-            "format": "bestaudio/best" if req.audio_only else "best",
+            "noprogress": True,
+            "outtmpl": temp_filename,
+            "format": "best"
         }
 
     try:
         with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-
+            ydl.download([url])
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"[yt-dlp error] {str(e)}"
+            detail=f"Erro ao baixar vídeo: {str(e)}"
         )
 
-    # Playlist? → pega o primeiro
-    if "entries" in info:
-        info = info["entries"][0]
+    # Ler o binário
+    try:
+        with open(temp_filename, "rb") as f:
+            data = f.read()
+    except:
+        raise HTTPException(status_code=500, detail="Erro ao ler arquivo baixado")
 
-    # ---------------------
-    # Formats
-    # ---------------------
-    formats_list = []
-    best_url = info.get("url")
+    # Apaga o arquivo temporário
+    try:
+        os.remove(temp_filename)
+    except:
+        pass
 
-    for f in info.get("formats", []):
-        formats_list.append({
-            "format_id": f.get("format_id"),
-            "ext": f.get("ext"),
-            "acodec": f.get("acodec"),
-            "vcodec": f.get("vcodec"),
-            "filesize": f.get("filesize"),
-            "resolution": f.get("resolution") or f.get("format_note"),
-            "url": f.get("url"),
-        })
-
-        if not best_url and f.get("url"):
-            best_url = f["url"]
-
-    if not best_url:
-        raise HTTPException(
-            status_code=500,
-            detail="Nenhum URL de download encontrado."
-        )
-
-    return {
-        "id": info.get("id"),
-        "title": info.get("title"),
-        "duration": info.get("duration"),
-        "thumbnail": info.get("thumbnail"),
-        "uploader": info.get("uploader"),
-        "webpage_url": info.get("webpage_url"),
-        "download_url": best_url,
-        "formats": formats_list,
-        "audio_only": req.audio_only,
-        "cookies_used": is_tiktok(url),
-        "platform": (
-            "tiktok" if is_tiktok(url)
-            else "youtube" if is_youtube(url)
-            else "generic"
-        )
-    }
+    return Response(
+        content=data,
+        media_type="video/mp4",
+        headers={
+            "Content-Disposition": 'attachment; filename="video.mp4"'
+        }
+    )
