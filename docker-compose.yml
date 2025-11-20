@@ -1,0 +1,7 @@
+services:
+  ytdlp-service:
+    build: .
+    container_name: ytdlp-service
+    ports:
+      - "8002:8000"
+    restart: unless-stopped
