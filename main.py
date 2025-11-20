@@ -23,11 +23,12 @@ TIKTOK_UA = os.getenv(
     "Chrome/120.0.0.0 Safari/537.36"
 )
 
-# Proxies opcionais (se quiser usar)
+# Proxies opcionais
 TIKTOK_PROXY = os.getenv("TIKTOK_PROXY")
 INSTAGRAM_PROXY = os.getenv("INSTAGRAM_PROXY")
 
 
+# Detectores
 def is_tiktok(url: str) -> bool:
     return "tiktok.com" in url
 
@@ -45,7 +46,8 @@ def build_opts_for_download(url: str, outtmpl: str) -> tuple[dict, str]:
     Monta ydl_opts para DOWNLOAD em melhor qualidade possível.
     Retorna (ydl_opts, platform)
     """
-    # TikTok
+
+    # --------------- TikTok ---------------
     if is_tiktok(url):
         opts = {
             "quiet": True,
@@ -61,9 +63,10 @@ def build_opts_for_download(url: str, outtmpl: str) -> tuple[dict, str]:
         }
         if TIKTOK_PROXY:
             opts["proxy"] = TIKTOK_PROXY
+
         return opts, "tiktok"
 
-    # Instagram
+    # --------------- Instagram ---------------
     if is_instagram(url):
         opts = {
             "quiet": True,
@@ -81,95 +84,26 @@ def build_opts_for_download(url: str, outtmpl: str) -> tuple[dict, str]:
         }
         if INSTAGRAM_PROXY:
             opts["proxy"] = INSTAGRAM_PROXY
+
         return opts, "instagram"
 
-    # YouTube
-if is_youtube(url):
-    opts = {
-        "quiet": True,
-        "noprogress": True,
-        "outtmpl": outtmpl,
-        
-        # pega o melhor vídeo + melhor áudio e junta
-        "format": "bv*+ba/b",  
+    # --------------- YouTube (versão corrigida e estável) ---------------
+    if is_youtube(url):
+        opts = {
+            "quiet": True,
+            "noprogress": True,
+            "outtmpl": outtmpl,
 
-        # junta tudo em MP4
-        "merge_output_format": "mp4",
+            # FORMAT CORRIGIDO – MELHOR VÍDEO + MELHOR ÁUDIO
+            "format": "bv*+ba/b",
 
-        # usa cookie login
-        "cookiefile": COOKIE_YOUTUBE,
+            # SEMPRE remuxa para MP4
+            "merge_output_format": "mp4",
 
-        # evita bloqueios de player
-        "extractor_args": {
-            "youtube": {
-                "player_skip": ["webpage", "configs"],
-                "player_client": ["web", "android", "ios", "tv"],
-            }
-        },
+            "cookiefile": COOKIE_YOUTUBE,
 
-        # garante conversão quando necessário
-        "postprocessors": [{
-            "key": "FFmpegVideoRemuxer",
-            "preferedformat": "mp4"
-        }],
-    }
-    return opts, "youtube"
-
-
-    # Genérico
-    opts = {
-        "quiet": True,
-        "noprogress": True,
-        "outtmpl": outtmpl,
-        "format": "best",
-    }
-    return opts, "generic"
-
-
-class VideoRequest(BaseModel):
-    url: str
-
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
-
-@app.post("/download")
-def download(req: VideoRequest):
-    """
-    Recebe {"url": "..."} e retorna o binário do vídeo em melhor qualidade possível.
-    """
-    url = req.url.strip()
-    if url.startswith("="):
-        url = url[1:].strip()
-
-    temp_filename = f"/tmp/{uuid.uuid4()}.mp4"
-
-    ydl_opts, platform = build_opts_for_download(url, temp_filename)
-
-    try:
-        with YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Erro ao baixar vídeo ({platform}): {str(e)}"
-        )
-
-    try:
-        with open(temp_filename, "rb") as f:
-            data = f.read()
-    except Exception:
-        raise HTTPException(status_code=500, detail="Erro ao ler arquivo baixado")
-
-    try:
-        os.remove(temp_filename)
-    except Exception:
-        pass
-
-    return Response(
-        content=data,
-        media_type="video/mp4",
-        headers={"Content-Disposition": 'attachment; filename=\"video.mp4\"'}
-    )
+            # Bypass de player restrictions
+            "extractor_args": {
+                "youtube": {
+                    "player_skip": ["webpage", "configs"],
+                    "player_c_
