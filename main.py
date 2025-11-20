@@ -44,6 +44,18 @@ def is_instagram(url: str) -> bool:
     return "instagram.com" in url or "instagr.am" in url
 
 
+def describe_cookie(path: str) -> str:
+    """Retorna info curta sobre o arquivo de cookies para debugging."""
+    if not os.path.exists(path):
+        return f"{path} (NAO existe)"
+    try:
+        size = os.path.getsize(path)
+    except Exception:
+        size = -1
+    readable = os.access(path, os.R_OK)
+    return f"{path} (size={size}, readable={readable})"
+
+
 def build_opts_for_download(url: str, outtmpl: str) -> tuple[dict, str]:
     """
     Monta ydl_opts para DOWNLOAD em melhor qualidade possível.
@@ -147,6 +159,12 @@ def download(req: VideoRequest):
                 "best",
             ]
             last_error = None
+
+            logger.info(
+                "YouTube: usando cookies %s",
+                describe_cookie(COOKIE_YOUTUBE),
+            )
+
             for fmt in format_candidates:
                 ydl_opts["format"] = fmt
                 logger.info("YouTube: tentando formato '%s' para %s", fmt, url)
