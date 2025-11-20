@@ -1,8 +1,12 @@
+import logging
 import os
 import uuid
 from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
 from yt_dlp import YoutubeDL
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("downloader")
 
 app = FastAPI(
     title="Universal Downloader",
@@ -90,7 +94,7 @@ def build_opts_for_download(url: str, outtmpl: str) -> tuple[dict, str]:
             "noprogress": True,
             "outtmpl": outtmpl,
             # pega melhor vídeo+áudio disponível e remuxa para mp4 quando possível
-            "format": "bv*+ba/best",
+            "format": "bv*+ba/bestvideo+bestaudio/best",
             "merge_output_format": "mp4",
             "postprocessors": [
                 {"key": "FFmpegVideoRemuxer", "preferedformat": "mp4"},
@@ -135,9 +139,34 @@ def download(req: VideoRequest):
     ydl_opts, platform = build_opts_for_download(url, temp_filename)
 
     try:
-        with YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
+        if platform == "youtube":
+            # Tenta alguns formatos em ordem, para contornar "Requested format is not available"
+            format_candidates = [
+                "bv*+ba/bestvideo+bestaudio/best",
+                "bestvideo+bestaudio/best",
+                "best",
+            ]
+            last_error = None
+            for fmt in format_candidates:
+                ydl_opts["format"] = fmt
+                logger.info("YouTube: tentando formato '%s' para %s", fmt, url)
+                try:
+                    with YoutubeDL(ydl_opts) as ydl:
+                        ydl.download([url])
+                    last_error = None
+                    break
+                except Exception as e:
+                    last_error = e
+                    logger.warning(
+                        "YouTube: falhou com formato '%s' em %s: %s", fmt, url, e
+                    )
+            if last_error:
+                raise last_error
+        else:
+            with YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
     except Exception as e:
+        logger.exception("Falha ao baixar (%s) %s", platform, url)
         raise HTTPException(
             status_code=500,
             detail=f"Erro ao baixar vídeo ({platform}): {str(e)}"
