@@ -6,8 +6,8 @@ from yt_dlp import YoutubeDL
 
 app = FastAPI(
     title="Universal Downloader",
-    description="TikTok + Instagram + YouTube usando yt-dlp",
-    version="4.0.0",
+    description="YouTube + Instagram + TikTok via yt-dlp, retornando binário",
+    version="5.0.0",
 )
 
 # Caminhos de cookies dentro do container
@@ -22,14 +22,10 @@ TIKTOK_UA = os.getenv(
     "Chrome/120.0.0.0 Safari/537.36"
 )
 
-# Proxies opcionais (se você quiser usar depois)
+# Proxies opcionais (se quiser usar)
 TIKTOK_PROXY = os.getenv("TIKTOK_PROXY")
 INSTAGRAM_PROXY = os.getenv("INSTAGRAM_PROXY")
 
-
-# ---------------------------
-# Helpers
-# ---------------------------
 
 def is_tiktok(url: str) -> bool:
     return "tiktok.com" in url
@@ -43,74 +39,12 @@ def is_instagram(url: str) -> bool:
     return "instagram.com" in url or "instagr.am" in url
 
 
-def build_opts_for_extract(url: str, audio_only: bool = False) -> tuple[dict, str]:
-    """
-    Monta ydl_opts para modo EXTRACT (sem download).
-    Retorna (ydl_opts, platform)
-    """
-    if is_tiktok(url):
-        opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "skip_download": True,
-            "cookiefile": COOKIE_TIKTOK,
-            "format": "bestaudio/best" if audio_only else "best",
-            "http_headers": {
-                "User-Agent": TIKTOK_UA,
-                "Referer": "https://www.tiktok.com/",
-                "Accept-Language": "en-US,en;q=0.9,pt-BR;q=0.8",
-            },
-        }
-        if TIKTOK_PROXY:
-            opts["proxy"] = TIKTOK_PROXY
-        return opts, "tiktok"
-
-    if is_instagram(url):
-        opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "skip_download": True,
-            "cookiefile": COOKIE_INSTAGRAM,  # funciona p/ público e privado
-            "format": "bestaudio/best" if audio_only else "best",
-            "http_headers": {
-                "User-Agent":
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/120.0.0.0 Safari/537.36",
-                "Referer": "https://www.instagram.com/",
-            },
-        }
-        if INSTAGRAM_PROXY:
-            opts["proxy"] = INSTAGRAM_PROXY
-        return opts, "instagram"
-
-    if is_youtube(url):
-        opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "skip_download": True,
-            "format": "bestaudio/best" if audio_only else "best[ext=mp4]/best",
-            "extractor_args": {
-                "youtube": {"player_client": ["web", "android"]}
-            },
-        }
-        return opts, "youtube"
-
-    # genérico
-    opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "skip_download": True,
-        "format": "bestaudio/best" if audio_only else "best",
-    }
-    return opts, "generic"
-
-
 def build_opts_for_download(url: str, outtmpl: str) -> tuple[dict, str]:
     """
-    Monta ydl_opts para modo DOWNLOAD (baixa arquivo).
+    Monta ydl_opts para DOWNLOAD em melhor qualidade possível.
     Retorna (ydl_opts, platform)
     """
+    # TikTok
     if is_tiktok(url):
         opts = {
             "quiet": True,
@@ -128,6 +62,7 @@ def build_opts_for_download(url: str, outtmpl: str) -> tuple[dict, str]:
             opts["proxy"] = TIKTOK_PROXY
         return opts, "tiktok"
 
+    # Instagram
     if is_instagram(url):
         opts = {
             "quiet": True,
@@ -147,11 +82,13 @@ def build_opts_for_download(url: str, outtmpl: str) -> tuple[dict, str]:
             opts["proxy"] = INSTAGRAM_PROXY
         return opts, "instagram"
 
+    # YouTube
     if is_youtube(url):
         opts = {
             "quiet": True,
             "noprogress": True,
             "outtmpl": outtmpl,
+            # tenta MP4 na melhor qualidade, se não der pega best
             "format": "best[ext=mp4]/best",
             "extractor_args": {
                 "youtube": {"player_client": ["web", "android"]}
@@ -159,7 +96,7 @@ def build_opts_for_download(url: str, outtmpl: str) -> tuple[dict, str]:
         }
         return opts, "youtube"
 
-    # genérico
+    # Genérico
     opts = {
         "quiet": True,
         "noprogress": True,
@@ -169,97 +106,19 @@ def build_opts_for_download(url: str, outtmpl: str) -> tuple[dict, str]:
     return opts, "generic"
 
 
-def pick_best_url(info: dict) -> str | None:
-    """
-    Tenta descobrir a melhor URL de download a partir do dict do yt-dlp.
-    """
-    # Alguns extractors já colocam a melhor URL em info["url"]
-    if info.get("url"):
-        return info["url"]
-
-    formats = info.get("formats") or []
-    if not formats:
-        return None
-
-    # Heurística simples: pega o último formato com url (normalmente maior qualidade)
-    for f in reversed(formats):
-        if f.get("url"):
-            return f["url"]
-
-    return None
-
-
-# ---------------------------
-# Models
-# ---------------------------
-
-class ExtractRequest(BaseModel):
-    url: str
-    audio_only: bool | None = False
-
-
 class VideoRequest(BaseModel):
     url: str
 
-
-# ---------------------------
-# Rotas
-# ---------------------------
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
 
-@app.post("/extract")
-def extract(req: ExtractRequest):
-    """
-    NÃO baixa o arquivo.
-    Retorna metadados + melhor download_url.
-    """
-    url = req.url.strip()
-    if url.startswith("="):
-        url = url[1:].strip()
-
-    ydl_opts, platform = build_opts_for_extract(url, audio_only=req.audio_only)
-
-    try:
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Erro ao extrair informações: {str(e)}"
-        )
-
-    # Playlist → pega primeiro item
-    if "entries" in info:
-        info = info["entries"][0]
-
-    best_url = pick_best_url(info)
-    if not best_url:
-        raise HTTPException(
-            status_code=500,
-            detail="Não foi possível determinar a URL de download."
-        )
-
-    return {
-        "platform": platform,
-        "id": info.get("id"),
-        "title": info.get("title"),
-        "duration": info.get("duration"),
-        "thumbnail": info.get("thumbnail"),
-        "uploader": info.get("uploader"),
-        "webpage_url": info.get("webpage_url"),
-        "download_url": best_url,   # <- URL NA MELHOR QUALIDADE
-        "audio_only": req.audio_only,
-    }
-
-
 @app.post("/download")
 def download(req: VideoRequest):
     """
-    Baixa o vídeo na melhor qualidade e devolve o binário (video/mp4)
+    Recebe {"url": "..."} e retorna o binário do vídeo em melhor qualidade possível.
     """
     url = req.url.strip()
     if url.startswith("="):
