@@ -6,22 +6,18 @@ services:
       - "8002:8000"
     restart: unless-stopped
 
-    # Mantém cookies persistentes
+    # Persistência dos cookies
     volumes:
       - ./cookies:/app/cookies
 
-    # Permite configurar user-agents e proxies
+    # Todas as variáveis de ambiente em UMA ÚNICA SEÇÃO
     environment:
-      - TIKTOK_UA=Mozilla/5.0 ...
+      - TIKTOK_UA=Mozilla/5.0
       - TIKTOK_PROXY=
       - INSTAGRAM_PROXY=
+      - TZ=America/Sao_Paulo
 
-    # Garante que o serviço não derrube o host em vídeos gigantes
     deploy:
       resources:
         limits:
-          memory: 512M  # opcional
-
-    # Evita timezone errado em logs
-    environment:
-      - TZ=America/Sao_Paulo
+          memory: 512M
