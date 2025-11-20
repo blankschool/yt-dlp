@@ -5,3 +5,23 @@ services:
     ports:
       - "8002:8000"
     restart: unless-stopped
+
+    # Mantém cookies persistentes
+    volumes:
+      - ./cookies:/app/cookies
+
+    # Permite configurar user-agents e proxies
+    environment:
+      - TIKTOK_UA=Mozilla/5.0 ...
+      - TIKTOK_PROXY=
+      - INSTAGRAM_PROXY=
+
+    # Garante que o serviço não derrube o host em vídeos gigantes
+    deploy:
+      resources:
+        limits:
+          memory: 512M  # opcional
+
+    # Evita timezone errado em logs
+    environment:
+      - TZ=America/Sao_Paulo
