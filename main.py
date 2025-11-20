@@ -1,12 +1,8 @@
-import logging
 import os
 import uuid
 from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
 from yt_dlp import YoutubeDL
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("downloader")
 
 app = FastAPI(
     title="Universal Downloader",
@@ -42,18 +38,6 @@ def is_youtube(url: str) -> bool:
 
 def is_instagram(url: str) -> bool:
     return "instagram.com" in url or "instagr.am" in url
-
-
-def describe_cookie(path: str) -> str:
-    """Retorna info curta sobre o arquivo de cookies para debugging."""
-    if not os.path.exists(path):
-        return f"{path} (NAO existe)"
-    try:
-        size = os.path.getsize(path)
-    except Exception:
-        size = -1
-    readable = os.access(path, os.R_OK)
-    return f"{path} (size={size}, readable={readable})"
 
 
 def build_opts_for_download(url: str, outtmpl: str) -> tuple[dict, str]:
@@ -100,23 +84,37 @@ def build_opts_for_download(url: str, outtmpl: str) -> tuple[dict, str]:
         return opts, "instagram"
 
     # YouTube
-    if is_youtube(url):
-        opts = {
-            "quiet": True,
-            "noprogress": True,
-            "outtmpl": outtmpl,
-            # pega melhor vídeo+áudio disponível e remuxa para mp4 quando possível
-            "format": "bv*+ba/bestvideo+bestaudio/best",
-            "merge_output_format": "mp4",
-            "postprocessors": [
-                {"key": "FFmpegVideoRemuxer", "preferedformat": "mp4"},
-            ],
-            "cookiefile": COOKIE_YOUTUBE,
-            "extractor_args": {
-                "youtube": {"player_client": ["web", "android"]}
-            },
-        }
-        return opts, "youtube"
+if is_youtube(url):
+    opts = {
+        "quiet": True,
+        "noprogress": True,
+        "outtmpl": outtmpl,
+        
+        # pega o melhor vídeo + melhor áudio e junta
+        "format": "bv*+ba/b",  
+
+        # junta tudo em MP4
+        "merge_output_format": "mp4",
+
+        # usa cookie login
+        "cookiefile": COOKIE_YOUTUBE,
+
+        # evita bloqueios de player
+        "extractor_args": {
+            "youtube": {
+                "player_skip": ["webpage", "configs"],
+                "player_client": ["web", "android", "ios", "tv"],
+            }
+        },
+
+        # garante conversão quando necessário
+        "postprocessors": [{
+            "key": "FFmpegVideoRemuxer",
+            "preferedformat": "mp4"
+        }],
+    }
+    return opts, "youtube"
+
 
     # Genérico
     opts = {
@@ -151,40 +149,9 @@ def download(req: VideoRequest):
     ydl_opts, platform = build_opts_for_download(url, temp_filename)
 
     try:
-        if platform == "youtube":
-            # Tenta alguns formatos em ordem, para contornar "Requested format is not available"
-            format_candidates = [
-                "bv*+ba/bestvideo+bestaudio/best",
-                "bestvideo+bestaudio/best",
-                "best",
-            ]
-            last_error = None
-
-            logger.info(
-                "YouTube: usando cookies %s",
-                describe_cookie(COOKIE_YOUTUBE),
-            )
-
-            for fmt in format_candidates:
-                ydl_opts["format"] = fmt
-                logger.info("YouTube: tentando formato '%s' para %s", fmt, url)
-                try:
-                    with YoutubeDL(ydl_opts) as ydl:
-                        ydl.download([url])
-                    last_error = None
-                    break
-                except Exception as e:
-                    last_error = e
-                    logger.warning(
-                        "YouTube: falhou com formato '%s' em %s: %s", fmt, url, e
-                    )
-            if last_error:
-                raise last_error
-        else:
-            with YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
+        with YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
     except Exception as e:
-        logger.exception("Falha ao baixar (%s) %s", platform, url)
         raise HTTPException(
             status_code=500,
             detail=f"Erro ao baixar vídeo ({platform}): {str(e)}"
