@@ -89,8 +89,12 @@ def build_opts_for_download(url: str, outtmpl: str) -> tuple[dict, str]:
             "quiet": True,
             "noprogress": True,
             "outtmpl": outtmpl,
-            # tenta MP4 na melhor qualidade, se não der pega best
-            "format": "best[ext=mp4]/best",
+            # pega melhor vídeo+áudio disponível e remuxa para mp4 quando possível
+            "format": "bv*+ba/best",
+            "merge_output_format": "mp4",
+            "postprocessors": [
+                {"key": "FFmpegVideoRemuxer", "preferedformat": "mp4"},
+            ],
             "cookiefile": COOKIE_YOUTUBE,
             "extractor_args": {
                 "youtube": {"player_client": ["web", "android"]}
