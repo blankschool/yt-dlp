@@ -22,14 +22,10 @@ TIKTOK_UA = os.getenv(
     "Chrome/120.0.0.0 Safari/537.36"
 )
 
-# Proxies opcionais
+# Proxies opcionais (se quiser usar)
 TIKTOK_PROXY = os.getenv("TIKTOK_PROXY")
 INSTAGRAM_PROXY = os.getenv("INSTAGRAM_PROXY")
 
-
-# ============================
-# DETECTORES DE PLATAFORMA
-# ============================
 
 def is_tiktok(url: str) -> bool:
     return "tiktok.com" in url
@@ -39,17 +35,16 @@ def is_youtube(url: str) -> bool:
     return "youtube.com" in url or "youtu.be" in url
 
 
-# ============================
-# MONTAGEM DE OPÇÕES DO YT-DLP
-# ============================
+def is_instagram(url: str) -> bool:
+    return "instagram.com" in url or "instagr.am" in url
+
 
 def build_opts_for_download(url: str, outtmpl: str) -> tuple[dict, str]:
     """
     Monta ydl_opts para DOWNLOAD em melhor qualidade possível.
     Retorna (ydl_opts, platform)
     """
-
-    # -------- TikTok --------
+    # TikTok
     if is_tiktok(url):
         opts = {
             "quiet": True,
@@ -63,46 +58,45 @@ def build_opts_for_download(url: str, outtmpl: str) -> tuple[dict, str]:
                 "Accept-Language": "en-US,en;q=0.9,pt-BR;q=0.8",
             },
         }
-
         if TIKTOK_PROXY:
             opts["proxy"] = TIKTOK_PROXY
-
         return opts, "tiktok"
 
+    # Instagram
+    if is_instagram(url):
+        opts = {
+            "quiet": True,
+            "noprogress": True,
+            "outtmpl": outtmpl,
+            "cookiefile": COOKIE_INSTAGRAM,
+            "format": "best",
+            "http_headers": {
+                "User-Agent":
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/120.0.0.0 Safari/537.36",
+                "Referer": "https://www.instagram.com/",
+            },
+        }
+        if INSTAGRAM_PROXY:
+            opts["proxy"] = INSTAGRAM_PROXY
+        return opts, "instagram"
 
-
-    # -------- YouTube (CORRIGIDO) --------
+    # YouTube
     if is_youtube(url):
         opts = {
             "quiet": True,
             "noprogress": True,
             "outtmpl": outtmpl,
-
-            # Pega melhor video + melhor audio
-            "format": "bv*+ba/b",
-
-            # Sempre volta MP4
-            "merge_output_format": "mp4",
-
-            "cookiefile": COOKIE_YOUTUBE,
-
-            # Força cliente multivariado para desbloquear formatos
+            # tenta MP4 na melhor qualidade, se não der pega best
+            "format": "best[ext=mp4]/best",
             "extractor_args": {
-                "youtube": {
-                    "player_skip": ["webpage", "configs"],
-                    "player_client": ["web", "android", "ios", "tv"],
-                }
+                "youtube": {"player_client": ["web", "android"]}
             },
-
-            "postprocessors": [{
-                "key": "FFmpegVideoRemuxer",
-                "preferedformat": "mp4"
-            }],
         }
-
         return opts, "youtube"
 
-    # -------- Genérico --------
+    # Genérico
     opts = {
         "quiet": True,
         "noprogress": True,
@@ -112,33 +106,20 @@ def build_opts_for_download(url: str, outtmpl: str) -> tuple[dict, str]:
     return opts, "generic"
 
 
-# ============================
-# MODELO DE REQUEST
-# ============================
-
 class VideoRequest(BaseModel):
     url: str
 
-
-# ============================
-# HEALTH CHECK
-# ============================
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
 
-# ============================
-# DOWNLOAD DE VÍDEO
-# ============================
-
 @app.post("/download")
 def download(req: VideoRequest):
     """
     Recebe {"url": "..."} e retorna o binário do vídeo em melhor qualidade possível.
     """
-
     url = req.url.strip()
     if url.startswith("="):
         url = url[1:].strip()
@@ -147,33 +128,28 @@ def download(req: VideoRequest):
 
     ydl_opts, platform = build_opts_for_download(url, temp_filename)
 
-    # ---------- DOWNLOAD ----------
     try:
         with YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
-
     except Exception as e:
         raise HTTPException(
             status_code=500,
             detail=f"Erro ao baixar vídeo ({platform}): {str(e)}"
         )
 
-    # ---------- LEITURA ----------
     try:
         with open(temp_filename, "rb") as f:
             data = f.read()
     except Exception:
         raise HTTPException(status_code=500, detail="Erro ao ler arquivo baixado")
 
-    # ---------- LIMPEZA ----------
     try:
         os.remove(temp_filename)
     except Exception:
         pass
 
-    # ---------- RESPOSTA ----------
     return Response(
         content=data,
         media_type="video/mp4",
-        headers={"Content-Disposition": 'attachment; filename="video.mp4"'}
+        headers={"Content-Disposition": 'attachment; filename=\"video.mp4\"'}
     )
