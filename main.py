@@ -21,8 +21,12 @@ app = FastAPI(
 BASE_DIR = Path(__file__).resolve().parent
 COOKIE_TIKTOK = str(BASE_DIR / "cookies" / "tiktok.txt")
 COOKIE_INSTAGRAM = str(BASE_DIR / "cookies" / "instagram.txt")
-# YouTube usa cookies.txt (conforme instrução do usuário)
-COOKIE_YOUTUBE = str(BASE_DIR / "cookies" / "cookies.txt")
+# YouTube usa cookies.txt (conforme instrução do usuário); é possível sobrescrever via env
+COOKIE_YOUTUBE = str(
+    Path(
+        os.getenv("YOUTUBE_COOKIE_FILE", BASE_DIR / "cookies" / "cookies.txt")
+    ).expanduser()
+)
 
 # User-Agent TikTok
 TIKTOK_UA = os.getenv(
@@ -129,8 +133,11 @@ def build_opts_for_download(url: str, outtmpl: str) -> tuple[dict, str]:
             "quiet": QUIET_FLAG,
             "noprogress": QUIET_FLAG,
             "outtmpl": outtmpl,
-            # pega melhor vídeo+áudio disponível e remuxa para mp4 quando possível
-            "format": "bv*+ba/bestvideo+bestaudio/best",
+            # pega melhor vídeo+áudio disponível, priorizando faixas mp4/m4a
+            "format": (
+                "bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/"
+                "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
+            ),
             "merge_output_format": "mp4",
             "postprocessors": [
                 {"key": "FFmpegVideoRemuxer", "preferedformat": "mp4"},
@@ -179,6 +186,8 @@ def download(req: VideoRequest):
             ensure_cookie(COOKIE_YOUTUBE, "youtube")
             # Tenta alguns formatos em ordem, para contornar "Requested format is not available"
             format_candidates = [
+                "bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/"
+                "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best",
                 "bv*+ba/bestvideo+bestaudio/best",
                 "bestvideo+bestaudio/best",
                 "best",
