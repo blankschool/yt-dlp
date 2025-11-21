@@ -21,7 +21,8 @@ app = FastAPI(
 BASE_DIR = Path(__file__).resolve().parent
 COOKIE_TIKTOK = str(BASE_DIR / "cookies" / "tiktok.txt")
 COOKIE_INSTAGRAM = str(BASE_DIR / "cookies" / "instagram.txt")
-COOKIE_YOUTUBE = str(BASE_DIR / "cookies" / "youtube.txt")
+# YouTube usa cookies.txt (conforme instrução do usuário)
+COOKIE_YOUTUBE = str(BASE_DIR / "cookies" / "cookies.txt")
 
 # User-Agent TikTok
 TIKTOK_UA = os.getenv(
