@@ -8,9 +8,9 @@
 .instagram.com	TRUE	/	TRUE	1796824554	ps_l	1
 .instagram.com	TRUE	/	TRUE	1796824554	ps_n	1
 .instagram.com	TRUE	/	TRUE	1797962444	mid	aRtiywAEAAG9Lyx4t-wMZ6N56u6C
-.instagram.com	TRUE	/	TRUE	1765318809	wd	1470x801
-.instagram.com	TRUE	/	TRUE	1799274015	csrftoken	RmrGjsIauhDyPhXli5lwvgef29oSukKA
+.instagram.com	TRUE	/	TRUE	1765546925	wd	1470x801
+.instagram.com	TRUE	/	TRUE	1799502125	csrftoken	RmrGjsIauhDyPhXli5lwvgef29oSukKA
 .instagram.com	TRUE	/	TRUE	1764960170	ig_direct_region_hint	"PNB\05474839328140\0541795891369:01fea9191c64b8bae2b09f7045bebf212d6206a9a2100df536e1addf4597adac15765b97"
-.instagram.com	TRUE	/	TRUE	1796250006	sessionid	75977591716%3AyjEfbnakT1DzCs%3A16%3AAYhxi-4ff1r7DjOLrUzR68eOY2sOgIVHgo_B7FjZyA
-.instagram.com	TRUE	/	TRUE	1772490015	ds_user_id	75977591716
-.instagram.com	TRUE	/	TRUE	0	rur	"NCG\05475977591716\0541796250015:01fe29f318098049a99466f6337d746249c3cb7d25ca969822b53741391192bab6db39df"
+.instagram.com	TRUE	/	TRUE	1772718125	ds_user_id	75977591716
+.instagram.com	TRUE	/	TRUE	1796478105	sessionid	75977591716%3ASJXcgIKi7fYwfx%3A2%3AAYj4ywEDCPjcq80AURKbChZk3uGz-lyjpJSxwFw-cA
+.instagram.com	TRUE	/	TRUE	0	rur	"NCG\05475977591716\0541796478124:01fecd3a55eb985448adaf33c3e84df9d2788ab74ea1dee2a6dedde664ae00e806e814ec"
